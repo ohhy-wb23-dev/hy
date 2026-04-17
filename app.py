@@ -1,104 +1,130 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import joblib
-import sklearn
 
-# --- 1. SETTINGS & ASSETS ---
-st.set_page_config(page_title="Productivity Forecast Pro", layout="wide")
+# --- CONFIGURATION ---
+st.set_page_config(page_title="Garment Productivity Predictor", layout="wide")
 
+# --- LOAD ASSETS ---
 @st.cache_resource
-def load_ml_assets():
-    try:
-        # Loading the specific files you dumped in cell 41 of your notebook
-        model = joblib.load('gbm_model.pkl')
-        model_cols = joblib.load('gbm_model_columns.pkl')
-        return model, model_cols
-    except FileNotFoundError:
-        st.error("❌ Model files missing. Ensure 'gbm_model.pkl' and 'gbm_model_columns.pkl' are in this folder.")
-        st.stop()
-    except Exception as e:
-        st.error(f"❌ Version Error: {e}")
-        st.info(f"Colab Version: 1.6.1 | Your Version: {sklearn.__version__}")
-        st.stop()
+def load_assets():
+    model = joblib.load('garment_xgb_model.pkl')
+    model_columns = joblib.load('xgb_model_columns.pkl')
+    return model, model_columns
 
-model, model_columns = load_ml_assets()
+model, model_columns = load_assets()
 
-# --- 2. USER INTERFACE ---
-st.title("🧵 Garment Productivity Predictor")
-st.markdown("### Model: **Optimized Gradient Boosting Pipeline**")
+# --- UI DESIGN ---
+st.title("🧵 Garment Factory Productivity Predictor")
+st.info("**Model Info:** Tuned XGBoost Classifier. Validation is active for each field.")
 
+# We use this to track if ANY input is currently invalid
+form_is_invalid = False
+
+# --- INPUT COLUMNS ---
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.subheader("📅 Context")
-    day = st.selectbox("Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Saturday", "Sunday"])
+    st.subheader("📅 Time & Place")
+    day = st.selectbox("Day of the Week", ["Monday", "Tuesday", "Wednesday", "Thursday", "Saturday", "Sunday"])
     quarter = st.selectbox("Quarter", ["Quarter1", "Quarter2", "Quarter3", "Quarter4", "Quarter5"])
     dept = st.selectbox("Department", ["Sewing", "Finishing"])
     team = st.slider("Team Number", 1, 12, 1)
 
 with col2:
-    st.subheader("⚙️ Resources")
-    wip = st.number_input("Work in Progress (wip)", value=500.0)
-    workers = st.number_input("No. of Workers", value=30.0)
-    style_change = st.selectbox("Style Changes", [0, 1, 2])
+    st.subheader("⚙️ Resource Allocation")
+    
+    # wip Validation
+    wip = st.number_input("Work in Progress (wip)", value=500)
+    if wip > 23122:
+        st.error(f"⚠️ Limit Exceeded: Max wip is 23,122")
+        form_is_invalid = True
+        
+    # Workers Validation
+    workers = st.number_input("Number of Workers", value=30)
+    if workers > 90 or workers < 2:
+        st.error(f"⚠️ Limit Exceeded: Range is 2 to 90")
+        form_is_invalid = True
+
+    style_change = st.selectbox("Number of Style Changes", ["0", "1", "2"])
+    
+    # SMV Validation
     smv = st.number_input("SMV (Complexity)", value=22.0)
+    if smv > 55 or smv < 2.9:
+        st.error(f"⚠️ Limit Exceeded: Range is 2.9 to 54.6")
+        form_is_invalid = True
 
 with col3:
-    st.subheader("💰 Metrics")
-    incentive = st.number_input("Incentive", value=0)
-    # over_time_scaled was added as a specific feature in your refined model
-    overtime = st.number_input("Overtime (Scaled Value)", value=0.0)
-    idle_time = st.number_input("Idle Time (Mins)", value=0.0)
-    idle_men = st.number_input("Idle Workers Count", value=0)
+    st.subheader("💰 Incentives & Metrics")
+    
+    # Incentive Validation
+    incentive = st.number_input("Incentive Amount", value=100)
+    if incentive > 3600:
+        st.error(f"⚠️ Limit Exceeded: Max Incentive is 3,600")
+        form_is_invalid = True
+        
+    overtime = st.slider("Overtime (Scaled)", -2.0, 2.0, 0.0)
+    
+    # idle Time Validation
+    idle_time = st.number_input("idle Time (Mins)", value=0)
+    if idle_time > 300:
+        st.error(f"⚠️ Limit Exceeded: Max idle Time is 300")
+        form_is_invalid = True
+        
+    # idle Men Validation
+    idle_men = st.number_input("idle Workers Count", value=0)
+    if idle_men > 45:
+        st.error(f"⚠️ Limit Exceeded: Max idle Workers is 45")
+        form_is_invalid = True
 
-# --- 3. PREDICTION ENGINE ---
+# --- PREDICTION LOGIC ---
 st.divider()
 
-if st.button("Generate Productivity Forecast", use_container_width=True):
-    # Construct raw dataframe using the original feature names
-    input_dict = {
-        'team': [team],
-        'smv': [smv],
-        'wip': [wip],
-        'incentive': [incentive],
-        'idle_time': [idle_time],
-        'idle_men': [idle_men],
-        'no_of_workers': [workers],
-        'over_time_scaled': [overtime],
-        'quarter': [quarter],
-        'department': [dept.lower()],
-        'day': [day],
-        'no_of_style_change': [int(style_change)]
-    }
-    
-    input_df = pd.DataFrame(input_dict)
+# Disable the button if the form is invalid
+if form_is_invalid:
+    st.warning("Please correct the errors above to enable the prediction.")
+    st.button("Generate Productivity Forecast", disabled=True)
+else:
+    if st.button("Generate Productivity Forecast", use_container_width=True):
+        # Initialize DataFrame
+        input_df = pd.DataFrame(0, index=[0], columns=model_columns)
+        
+        # Mapping Values
+        input_df['team'] = team
+        input_df['smv'] = smv
+        input_df['wip'] = wip
+        input_df['incentive'] = incentive
+        input_df['idle_time'] = idle_time
+        input_df['idle_men'] = idle_men
+        input_df['no_of_workers'] = workers
+        input_df['over_time_scaled'] = overtime 
+        
+        # Encoding
+        def set_dummy(category, value):
+            col_name = f"{category}_{value}"
+            if col_name in model_columns:
+                input_df[col_name] = 1
 
-    try:
-        # CRITICAL: Reorder columns to match 'gbm_model_columns.pkl' exactly
+        set_dummy('quarter', quarter)
+        set_dummy('department', dept.lower())
+        set_dummy('day', day)
+        set_dummy('no_of_style_change', style_change)
+
+        # Align & Predict
         input_df = input_df[model_columns]
-
-        # Predict using the Pipeline (it handles scaling/encoding internally)
         prediction_idx = model.predict(input_df)[0]
         probs = model.predict_proba(input_df)[0]
         
-        # UI Mapping consistent with notebook
         labels = ['Low', 'Moderate', 'High']
         result = labels[prediction_idx]
         
-        st.markdown(f"<h2 style='text-align: center;'>Predicted Tier: {result}</h2>", unsafe_allow_html=True)
-        
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Low Prob.", f"{probs[0]:.1%}")
-        m2.metric("Moderate Prob.", f"{probs[1]:.1%}")
-        m3.metric("High Prob.", f"{probs[2]:.1%}")
-
-        if result == 'High':
-            st.success("Target likely to be exceeded.")
+        st.markdown(f"## Predicted Tier: **{result}**")
+  if result == 'High':
+            st.success(f"Confidence: {probs[2]:.2%} - Optimized production detected.")
             st.balloons()
         elif result == 'Moderate':
-            st.warning("On track for standard targets.")
+            st.warning(f"Confidence: {probs[1]:.2%} - Operating within standard range.")
         else:
-            st.error("High risk of falling below target.")
+            st.error(f"Confidence: {probs[0]:.2%} - High risk of target shortfall.")
 
-    except Exception as e:
-        st.error(f"Prediction logic failed: {e}")
