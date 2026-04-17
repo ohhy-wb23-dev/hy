@@ -19,9 +19,9 @@ st.set_page_config(
 st.markdown("""
 <style>
 .main-title { font-size: 2.1rem; font-weight: 800; color: #1e293b; margin-bottom: 0.2rem; }
-.sub-text { color: #64748b; margin-bottom: 1.5rem; font-style: italic; }
+.sub-text { color: #64748b; margin-bottom: 1.5rem; }
 .block-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-.result-card { border-radius: 16px; padding: 25px; border: 1px solid #cbd5e1; background: #f1f5f9; }
+.result-card { border-radius: 16px; padding: 25px; border: 1px solid #cbd5e1; background: #f8fafc; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -36,28 +36,26 @@ def load_assets():
 
 try:
     model, model_columns = load_assets()
-except Exception as e:
-    st.error("Missing model assets. Please check gbm_model.pkl and gbm_model_columns.pkl.")
+except Exception:
+    st.error("Model assets not found.")
     st.stop()
 
-# Constants
+# Labels
 LABELS = {0: "Low", 1: "Moderate", 2: "High"}
 LABEL_EMOJI = {"Low": "🔴", "Moderate": "🟡", "High": "🟢"}
 LABEL_TEXT = {
-    "Low": "Productivity is significantly below target. Immediate intervention required.",
-    "Moderate": "Productivity is stable but shows room for optimization.",
-    "High": "Optimal operating conditions. Productivity exceeds performance benchmarks."
+    "Low": "Productivity is likely below target. Intervention recommended.",
+    "Moderate": "Productivity is stable. Standard operating conditions.",
+    "High": "High productivity is likely. Optimal performance detected."
 }
 
 # ==========================================
 # HELPERS
 # ==========================================
 def build_model_input(day, quarter, dept, team, wip, workers, style_change, smv, incentive, overtime, idle_time, idle_men):
-    # Initialize with 192 columns (zeros)
     input_df = pd.DataFrame(0, index=[0], columns=model_columns)
-
-    # Numeric Feature Mapping
-    numeric_map = {
+    
+    numeric_features = {
         "team": team,
         "smv": smv,
         "wip": wip,
@@ -68,46 +66,41 @@ def build_model_input(day, quarter, dept, team, wip, workers, style_change, smv,
         "over_time_scaled": overtime,
     }
 
-    for col, val in numeric_map.items():
+    for col, val in numeric_features.items():
         if col in input_df.columns:
             input_df.at[0, col] = val
 
-    # Categorical Feature Mapping (One-Hot Logic)
-    cat_keys = [
+    cat_cols = [
         f"quarter_{quarter}",
         f"department_{dept.lower()}",
         f"day_{day}",
-        f"no_of_style_change_{int(style_change)}"
+        f"no_of_style_change_{int(style_change)}" 
     ]
 
-    for key in cat_keys:
-        if key in input_df.columns:
-            input_df.at[0, key] = 1
+    for col in cat_cols:
+        if col in input_df.columns:
+            input_df.at[0, col] = 1
 
     return input_df[model_columns]
 
 # ==========================================
-# SIDEBAR & PRESETS
+# PRESETS & UI
 # ==========================================
-st.sidebar.header("📊 Simulation Controls")
-preset = st.sidebar.selectbox("Choose Scenario", ["Custom", "Average Baseline", "High Workload", "Resource Interruption"])
-
-# Refined Preset Data based on your new ranges
-preset_logic = {
-    "Custom": {"team": 6, "wip": 500, "workers": 30, "style": 0, "smv": 22.0, "inc": 50, "ot": 0.0, "it": 0, "im": 0},
-    "Average Baseline": {"team": 1, "wip": 1190, "workers": 34, "style": 0, "smv": 15.0, "inc": 38, "ot": 0.0, "it": 0, "im": 0},
-    "High Workload": {"team": 5, "wip": 2500, "workers": 55, "style": 1, "smv": 45.0, "inc": 100, "ot": 1.2, "it": 0, "im": 0},
-    "Resource Interruption": {"team": 12, "wip": 500, "workers": 15, "style": 0, "smv": 10.0, "inc": 0, "ot": -0.8, "it": 120, "im": 10}
+# Updated presets based on dataset stats
+preset_data = {
+    "Custom Input": {"day": "Monday", "quarter": "Quarter1", "dept": "Sewing", "team": 6, "wip": 500, "workers": 30, "style": 0, "smv": 22.0, "inc": 50, "ot": 0.0, "it": 0, "im": 0},
+    "Balanced Setup": {"day": "Tuesday", "quarter": "Quarter2", "dept": "Sewing", "team": 4, "wip": 1000, "workers": 35, "style": 0, "smv": 15.0, "inc": 40, "ot": 0.0, "it": 0, "im": 0},
+    "High Intensity": {"day": "Wednesday", "quarter": "Quarter3", "dept": "Sewing", "team": 2, "wip": 200, "workers": 60, "style": 1, "smv": 45.0, "inc": 150, "ot": 1.5, "it": 0, "im": 0}
 }
-d = preset_logic[preset]
 
-# ==========================================
-# MAIN UI
-# ==========================================
+st.sidebar.title("App Controls")
+preset = st.sidebar.selectbox("Quick Scenario", list(preset_data.keys()))
+d = preset_data[preset]
+
 st.markdown('<div class="main-title">🏭 Garment Productivity Predictor</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-text">Advanced Analytics for Operational Performance (192-Feature GBM Model)</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-text">Optimized using actual data distributions from <i>final_classification_dataset.csv</i></div>', unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["Dashboard", "Model Specification"])
+tab1, tab2 = st.tabs(["Prediction Dashboard", "Technical Data View"])
 
 with tab1:
     col1, col2, col3 = st.columns(3)
@@ -115,59 +108,55 @@ with tab1:
     with col1:
         st.markdown('<div class="block-card">', unsafe_allow_html=True)
         st.subheader("📅 Context")
-        day = st.selectbox("Working Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Saturday", "Sunday"])
-        quarter = st.selectbox("Quarter", ["Quarter1", "Quarter2", "Quarter3", "Quarter4", "Quarter5"])
-        dept = st.radio("Dept", ["Sewing", "Finishing"], horizontal=True)
-        team = st.number_input("Team ID", 1, 12, d["team"])
+        day = st.selectbox("Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Saturday", "Sunday"], index=0)
+        quarter = st.selectbox("Quarter", ["Quarter1", "Quarter2", "Quarter3", "Quarter4", "Quarter5"], index=0)
+        dept = st.radio("Department", ["Sewing", "Finished"], help="Updated to match dataset classes.")
+        team = st.slider("Team Number", 1, 12, d["team"])
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
         st.markdown('<div class="block-card">', unsafe_allow_html=True)
         st.subheader("⚙️ Resources")
-        wip = st.number_input("WIP (Items)", 0, 23122, d["wip"], help="Work in Progress")
-        workers = st.number_input("Team Size", 2, 90, d["workers"], help="Total labor assigned")
+        # Ranges refined based on dataset analysis
+        wip = st.number_input("WIP (Items)", 0, 2698, d["wip"], help="Max observed: 2,698")
+        workers = st.number_input("Total Workers", 2, 89, d["workers"], help="Range: 2 to 89")
         style_change = st.selectbox("Style Changes", [0, 1, 2], index=d["style"])
-        smv = st.number_input("SMV (Minutes)", 2.9, 55.0, d["smv"], help="Time allocated per task")
+        smv = st.number_input("SMV (Complexity)", 2.9, 54.6, d["smv"], format="%.2f")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col3:
         st.markdown('<div class="block-card">', unsafe_allow_html=True)
-        st.subheader("💰 Performance")
-        incentive = st.number_input("Incentive (BDT)", 0, 3600, d["inc"], help="Financial motivation")
-        overtime = st.slider("Overtime (Scaled)", -2.0, 2.0, d["ot"], help="Standardized Z-Score: 0 is the factory mean")
-        idle_time = st.number_input("Idle Time (Min)", 0, 300, d["it"], help="Production interruption duration")
-        idle_men = st.number_input("Idle Workers", 0, 45, d["im"], help="Labor affected by downtime")
+        st.subheader("💰 Metrics")
+        incentive = st.number_input("Incentive (BDT)", 0, 3600, d["inc"])
+        overtime = st.slider("Overtime (Scaled)", -2.0, 2.0, d["ot"], help="Normalized value (Z-Score)")
+        idle_time = st.number_input("Idle Time (Min)", 0, 300, d["it"])
+        idle_men = st.number_input("Idle Workers", 0, 45, d["im"])
         st.markdown('</div>', unsafe_allow_html=True)
 
     if st.button("Generate Forecast", use_container_width=True, type="primary"):
         input_data = build_model_input(day, quarter, dept, team, wip, workers, style_change, smv, incentive, overtime, idle_time, idle_men)
         
-        # Inference
         pred_idx = int(model.predict(input_data)[0])
         probs = model.predict_proba(input_data)[0]
         result = LABELS[pred_idx]
-        
+
         st.markdown('<div class="result-card">', unsafe_allow_html=True)
-        res_col1, res_col2 = st.columns([3, 1])
-        with res_col1:
-            st.markdown(f"## {LABEL_EMOJI[result]} {result} Productivity Predicted")
-            st.write(f"**Status:** {LABEL_TEXT[result]}")
-        with res_col2:
-            st.metric("Confidence", f"{probs[pred_idx]:.2%}")
+        st.markdown(f"## {LABEL_EMOJI[result]} {result} Productivity")
+        st.write(LABEL_TEXT[result])
+        st.metric("Model Confidence", f"{probs[pred_idx]:.2%}")
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Probability Breakdown
-        st.markdown("### 🔍 Probability Distribution")
-        cols = st.columns(3)
+        st.markdown("### Probability Distribution")
+        p_cols = st.columns(3)
         for i, label in enumerate(["Low", "Moderate", "High"]):
-            with cols[i]:
+            with p_cols[i]:
                 st.write(f"**{label}**")
                 st.progress(float(probs[i]))
-                st.caption(f"{probs[i]:.1%}")
 
 with tab2:
-    st.subheader("Feature Vector Structure")
-    st.write(f"The model processes a total of **{len(model_columns)}** unique features.")
-    st.info("Scaling Reference: Overtime is normalized using a Z-score transformation where 0 represents the average factory output.")
-    with st.expander("Show Active Encoded Features"):
+    st.subheader("Input Feature Vector")
+    st.write("This table shows the 192-feature vector currently being processed by the GBM model.")
+    if 'input_data' in locals():
         st.dataframe(input_data)
+    else:
+        st.info("Run a prediction to see the vector data.")
