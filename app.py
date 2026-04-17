@@ -124,7 +124,7 @@ with tab1:
         st.subheader("💰 Metrics")
         incentive = st.number_input("Incentive (BDT)", 0, 3600, d["inc"], help="Max observed: 3,600")
         # CORRECTED: Range up to 1,000
-        ot_raw = st.slider("Overtime (Minutes)", 0, 1000, d["ot_raw"])
+        ot_raw = st.slider("Overtime (Minutes)", 0, 25920, d["ot_raw"])
         idle_time = st.number_input("Idle Time (Min)", 0.0, 300.0, 0.0)
         idle_men = st.number_input("Idle Workers", 0, 45, 0)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -150,6 +150,6 @@ with tab1:
 with tab2:
     st.write("### Data Range Validation")
     st.table(pd.DataFrame({
-        "Parameter": ["WIP", "Incentive", "SMV", "Workers", "Idle Time"],
-        "Corrected Max": [2698.0, 3600, 54.56, 89.0, 300.0]
+        "Parameter": ["WIP", "Incentive", "SMV", "Workers", "Idle Time", "Overtime"],
+        "Corrected Max": [2698.0, 3600, 54.56, 89.0, 300.0, 25920.0] # Added Overtime here
     }))
