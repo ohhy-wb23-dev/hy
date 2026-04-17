@@ -1,162 +1,185 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
+import pickle
 
-# ==========================================
-# PAGE CONFIG
-# ==========================================
-st.set_page_config(
-    page_title="Garment Productivity Predictor",
-    page_icon="🏭",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# =========================
+# LOAD DATA & MODEL
+# =========================
+@st.cache_data
+def load_data():
+    df = pd.read_csv("final_classification_dataset.csv")
+    return df
 
-# ==========================================
-# CUSTOM STYLING
-# ==========================================
-st.markdown("""
-<style>
-.main-title { font-size: 2.1rem; font-weight: 800; color: #1e293b; margin-bottom: 0.2rem; }
-.sub-text { color: #64748b; margin-bottom: 1.5rem; }
-.block-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-.result-card { border-radius: 16px; padding: 25px; border: 1px solid #cbd5e1; background: #f8fafc; }
-</style>
-""", unsafe_allow_html=True)
-
-# ==========================================
-# LOAD ASSETS
-# ==========================================
 @st.cache_resource
-def load_assets():
-    model = joblib.load("gbm_model.pkl")
-    model_columns = joblib.load("gbm_model_columns.pkl")
-    return model, model_columns
+def load_model():
+    with open("model.pkl", "rb") as f:
+        model = pickle.load(f)
+    return model
 
-try:
-    model, model_columns = load_assets()
-except Exception:
-    st.error("Model assets not found.")
-    st.stop()
+df = load_data()
+model = load_model()
 
-# Labels
-LABELS = {0: "Low", 1: "Moderate", 2: "High"}
-LABEL_EMOJI = {"Low": "🔴", "Moderate": "🟡", "High": "🟢"}
-LABEL_TEXT = {
-    "Low": "Productivity is likely below target. Intervention recommended.",
-    "Moderate": "Productivity is stable. Standard operating conditions.",
-    "High": "High productivity is likely. Optimal performance detected."
+# =========================
+# GET DYNAMIC RANGES
+# =========================
+def get_ranges(df):
+    ranges = {}
+    for col in df.columns:
+        if df[col].dtype != "object":
+            ranges[col] = (df[col].min(), df[col].max())
+    return ranges
+
+ranges = get_ranges(df)
+
+# =========================
+# HELPER FUNCTION
+# =========================
+def clamp(val, min_val, max_val):
+    return max(min_val, min(val, max_val))
+
+# =========================
+# TITLE
+# =========================
+st.title("Garment Productivity Prediction System")
+
+st.markdown("""
+This system predicts worker productivity based on operational inputs.
+All input ranges are dynamically derived from the final dataset.
+""")
+
+# =========================
+# PRESET EXAMPLE
+# =========================
+st.subheader("Preset Example")
+
+preset = {
+    "wip": int(df["wip"].mean()),
+    "no_of_workers": int(df["no_of_workers"].mean()),
+    "smv": float(df["smv"].mean()),
+    "incentive": int(df["incentive"].mean()),
+    "idle_time": int(df["idle_time"].mean()),
+    "idle_men": int(df["idle_men"].mean()),
+    "over_time_scaled": float(df["over_time_scaled"].mean()) if "over_time_scaled" in df.columns else 0.0
 }
 
-# ==========================================
-# HELPERS
-# ==========================================
-def build_model_input(day, quarter, dept, team, wip, workers, style_change, smv, incentive, overtime, idle_time, idle_men):
-    input_df = pd.DataFrame(0, index=[0], columns=model_columns)
-    
-    numeric_features = {
-        "team": team,
-        "smv": smv,
-        "wip": wip,
-        "incentive": incentive,
-        "idle_time": idle_time,
-        "idle_men": idle_men,
-        "no_of_workers": workers,
-        "over_time_scaled": overtime,
-    }
+# Clamp preset values
+for key in preset:
+    if key in ranges:
+        preset[key] = clamp(preset[key], ranges[key][0], ranges[key][1])
 
-    for col, val in numeric_features.items():
-        if col in input_df.columns:
-            input_df.at[0, col] = val
+# =========================
+# INPUT SECTION
+# =========================
+st.subheader("Input Parameters")
 
-    cat_cols = [
-        f"quarter_{quarter}",
-        f"department_{dept.lower()}",
-        f"day_{day}",
-        f"no_of_style_change_{int(style_change)}" 
-    ]
+col1, col2 = st.columns(2)
 
-    for col in cat_cols:
-        if col in input_df.columns:
-            input_df.at[0, col] = 1
+with col1:
+    wip = st.number_input(
+        "Work In Progress (WIP)",
+        int(ranges["wip"][0]), int(ranges["wip"][1]),
+        preset["wip"]
+    )
+    st.caption(f"Range: {ranges['wip'][0]} – {ranges['wip'][1]}")
 
-    return input_df[model_columns]
+    workers = st.number_input(
+        "Number of Workers",
+        int(ranges["no_of_workers"][0]), int(ranges["no_of_workers"][1]),
+        preset["no_of_workers"]
+    )
+    st.caption(f"Range: {ranges['no_of_workers'][0]} – {ranges['no_of_workers'][1]}")
 
-# ==========================================
-# PRESETS & UI
-# ==========================================
-# Updated presets based on dataset stats
-preset_data = {
-    "Custom Input": {"day": "Monday", "quarter": "Quarter1", "dept": "Sewing", "team": 6, "wip": 500, "workers": 30, "style": 0, "smv": 22.0, "inc": 50, "ot": 0.0, "it": 0, "im": 0},
-    "Balanced Setup": {"day": "Tuesday", "quarter": "Quarter2", "dept": "Sewing", "team": 4, "wip": 1000, "workers": 35, "style": 0, "smv": 15.0, "inc": 40, "ot": 0.0, "it": 0, "im": 0},
-    "High Intensity": {"day": "Wednesday", "quarter": "Quarter3", "dept": "Sewing", "team": 2, "wip": 200, "workers": 60, "style": 1, "smv": 45.0, "inc": 150, "ot": 1.5, "it": 0, "im": 0}
-}
+    smv = st.number_input(
+        "SMV (Standard Minute Value)",
+        float(ranges["smv"][0]), float(ranges["smv"][1]),
+        preset["smv"]
+    )
+    st.caption(f"Range: {ranges['smv'][0]} – {ranges['smv'][1]}")
 
-st.sidebar.title("App Controls")
-preset = st.sidebar.selectbox("Quick Scenario", list(preset_data.keys()))
-d = preset_data[preset]
+with col2:
+    incentive = st.number_input(
+        "Incentive",
+        int(ranges["incentive"][0]), int(ranges["incentive"][1]),
+        preset["incentive"]
+    )
+    st.caption(f"Range: {ranges['incentive'][0]} – {ranges['incentive'][1]}")
 
-st.markdown('<div class="main-title">🏭 Garment Productivity Predictor</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-text">Optimized using actual data distributions from <i>final_classification_dataset.csv</i></div>', unsafe_allow_html=True)
+    idle_time = st.number_input(
+        "Idle Time",
+        int(ranges["idle_time"][0]), int(ranges["idle_time"][1]),
+        preset["idle_time"]
+    )
+    st.caption(f"Range: {ranges['idle_time'][0]} – {ranges['idle_time'][1]}")
 
-tab1, tab2 = st.tabs(["Prediction Dashboard", "Technical Data View"])
+    idle_men = st.number_input(
+        "Idle Workers",
+        int(ranges["idle_men"][0]), int(ranges["idle_men"][1]),
+        preset["idle_men"]
+    )
+    st.caption(f"Range: {ranges['idle_men'][0]} – {ranges['idle_men'][1]}")
 
-with tab1:
-    col1, col2, col3 = st.columns(3)
+# =========================
+# OVERTIME (SPECIAL CASE)
+# =========================
+st.subheader("Additional Factor")
 
-    with col1:
-        st.markdown('<div class="block-card">', unsafe_allow_html=True)
-        st.subheader("📅 Context")
-        day = st.selectbox("Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Saturday", "Sunday"], index=0)
-        quarter = st.selectbox("Quarter", ["Quarter1", "Quarter2", "Quarter3", "Quarter4", "Quarter5"], index=0)
-        dept = st.radio("Department", ["Sewing", "Finished"], help="Updated to match dataset classes.")
-        team = st.slider("Team Number", 1, 12, d["team"])
-        st.markdown('</div>', unsafe_allow_html=True)
+if "over_time_scaled" in ranges:
+    overtime = st.slider(
+        "Overtime (Scaled)",
+        float(ranges["over_time_scaled"][0]),
+        float(ranges["over_time_scaled"][1]),
+        preset["over_time_scaled"]
+    )
+else:
+    overtime = st.slider("Overtime (Scaled)", -2.0, 2.0, 0.0)
 
-    with col2:
-        st.markdown('<div class="block-card">', unsafe_allow_html=True)
-        st.subheader("⚙️ Resources")
-        # Ranges refined based on dataset analysis
-        wip = st.number_input("WIP (Items)", 0, 2698, d["wip"], help="Max observed: 2,698")
-        workers = st.number_input("Total Workers", 2, 89, d["workers"], help="Range: 2 to 89")
-        style_change = st.selectbox("Style Changes", [0, 1, 2], index=d["style"])
-        smv = st.number_input("SMV (Complexity)", 2.9, 54.6, d["smv"], format="%.2f")
-        st.markdown('</div>', unsafe_allow_html=True)
+# =========================
+# PREDICTION
+# =========================
+st.subheader("Prediction")
 
-    with col3:
-        st.markdown('<div class="block-card">', unsafe_allow_html=True)
-        st.subheader("💰 Metrics")
-        incentive = st.number_input("Incentive (BDT)", 0, 3600, d["inc"])
-        overtime = st.slider("Overtime (Scaled)", -2.0, 2.0, d["ot"], help="Normalized value (Z-Score)")
-        idle_time = st.number_input("Idle Time (Min)", 0, 300, d["it"])
-        idle_men = st.number_input("Idle Workers", 0, 45, d["im"])
-        st.markdown('</div>', unsafe_allow_html=True)
+if st.button("Predict Productivity"):
 
-    if st.button("Generate Forecast", use_container_width=True, type="primary"):
-        input_data = build_model_input(day, quarter, dept, team, wip, workers, style_change, smv, incentive, overtime, idle_time, idle_men)
-        
-        pred_idx = int(model.predict(input_data)[0])
-        probs = model.predict_proba(input_data)[0]
-        result = LABELS[pred_idx]
+    input_data = pd.DataFrame({
+        "wip": [wip],
+        "no_of_workers": [workers],
+        "smv": [smv],
+        "incentive": [incentive],
+        "idle_time": [idle_time],
+        "idle_men": [idle_men],
+        "over_time_scaled": [overtime]
+    })
 
-        st.markdown('<div class="result-card">', unsafe_allow_html=True)
-        st.markdown(f"## {LABEL_EMOJI[result]} {result} Productivity")
-        st.write(LABEL_TEXT[result])
-        st.metric("Model Confidence", f"{probs[pred_idx]:.2%}")
-        st.markdown('</div>', unsafe_allow_html=True)
+    prediction = model.predict(input_data)[0]
 
-        st.markdown("### Probability Distribution")
-        p_cols = st.columns(3)
-        for i, label in enumerate(["Low", "Moderate", "High"]):
-            with p_cols[i]:
-                st.write(f"**{label}**")
-                st.progress(float(probs[i]))
-
-with tab2:
-    st.subheader("Input Feature Vector")
-    st.write("This table shows the 192-feature vector currently being processed by the GBM model.")
-    if 'input_data' in locals():
-        st.dataframe(input_data)
+    # =========================
+    # CLASSIFICATION LOGIC
+    # =========================
+    if prediction < 0.5:
+        category = "Low Productivity"
+    elif prediction < 0.75:
+        category = "Moderate Productivity"
     else:
-        st.info("Run a prediction to see the vector data.")
+        category = "High Productivity"
+
+    # =========================
+    # OUTPUT
+    # =========================
+    st.success(f"Predicted Productivity: {prediction:.2f}")
+    st.info(f"Category: {category}")
+
+# =========================
+# DATA PREVIEW
+# =========================
+with st.expander("View Dataset Summary"):
+    st.write(df.describe())
+
+# =========================
+# FOOTER
+# =========================
+st.markdown("""
+---
+System designed with dataset-driven input validation to ensure consistency 
+between training data and prediction environment.
+""")
