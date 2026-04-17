@@ -3,6 +3,12 @@ import pandas as pd
 import joblib
 import numpy as np
 
+# These imports are CRITICAL for joblib to load the gbm_model.pkl pipeline
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, PolynomialFeatures
+
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Garment Productivity Predictor (GBM)", layout="wide")
 
@@ -10,10 +16,10 @@ st.set_page_config(page_title="Garment Productivity Predictor (GBM)", layout="wi
 @st.cache_resource
 def load_assets():
     # 1. Load the trained Pipeline (Model + Preprocessing)
+    # The error in your screenshot was likely due to missing the imports above
     model = joblib.load('gbm_model.pkl')
     
     # 2. Load the specific column list used during training
-    # This ensures the order and naming match exactly
     model_columns = joblib.load('gbm_model_columns.pkl')
     
     return model, model_columns
@@ -82,7 +88,7 @@ if form_is_invalid:
     st.button("Generate Forecast", disabled=True)
 else:
     if st.button("Generate Productivity Forecast", use_container_width=True):
-        # Create a dictionary matching the raw column names
+        # Create a dictionary matching the raw column names expected by the preprocessor
         data_dict = {
             'quarter': [quarter],
             'department': [department],
@@ -101,10 +107,11 @@ else:
         # Convert to DataFrame
         input_df = pd.DataFrame(data_dict)
         
-        # Ensure column order matches exactly with gbm_model_columns.pkl
+        # Ensure column order matches exactly with the training feature schema
         input_df = input_df[model_columns]
 
         # Use the Pipeline to predict
+        # This handles scaling and encoding automatically
         prediction_idx = model.predict(input_df)[0]
         probs = model.predict_proba(input_df)[0]
         
@@ -114,8 +121,7 @@ else:
         # Display Results
         st.markdown(f"## Predicted Productivity Tier: **{result}**")
         
-        # Determine confidence and color based on index
-        # Index 0=Low, 1=Moderate, 2=High
+        # Determine confidence and color based on index (0=Low, 1=Moderate, 2=High)
         if result == 'High':
             st.success(f"Confidence: {probs[2]:.2%} — Optimal production levels expected.")
             st.balloons()
