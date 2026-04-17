@@ -154,7 +154,7 @@ with col2:
 with col3:
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.subheader("💰 Time & Efficiency Metrics")
-    over_time = st.number_input("Overtime (Minutes)", min_value=0, max_value=20000, value=500)
+    over_time = st.number_input("Overtime (Minutes)", min_value=0, max_value=20000, value=1000)
     incentive = st.number_input("Incentive Amount", min_value=incentive_min, max_value=incentive_max, value=50)
     idle_time = st.number_input("Idle Time (Mins)", min_value=idle_time_min, max_value=idle_time_max, value=0)
     idle_men = st.number_input("Idle Workers Count", min_value=idle_men_min, max_value=idle_men_max, value=0)
