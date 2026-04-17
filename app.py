@@ -3,7 +3,8 @@ import pandas as pd
 import joblib
 import numpy as np
 
-# These imports are CRITICAL for joblib to reconstruct your model from the pkl file
+# --- CRITICAL IMPORTS FOR JOBLIB ---
+# These must be present so Python knows how to "unpickle" your model
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
@@ -15,15 +16,12 @@ st.set_page_config(page_title="Garment Productivity Predictor (GBM)", layout="wi
 # --- LOAD ASSETS ---
 @st.cache_resource
 def load_assets():
-    # Load the trained Pipeline (contains preprocessor + model)
+    # 1. Load the trained Pipeline (Model + Preprocessing)
     model = joblib.load('gbm_model.pkl')
-    
-    # Load the specific column list used during training
+    # 2. Load the specific column list used during training
     model_columns = joblib.load('gbm_model_columns.pkl')
-    
     return model, model_columns
 
-# Unpack both assets
 model, model_columns = load_assets()
 
 # --- UI DESIGN ---
@@ -86,9 +84,8 @@ if form_is_invalid:
     st.warning("Please correct the validation errors to proceed.")
     st.button("Generate Forecast", disabled=True)
 else:
-    # Everything inside this 'else' must be indented exactly 4 spaces
     if st.button("Generate Productivity Forecast", use_container_width=True):
-        # Create input dictionary
+        # Create a DataFrame with the exact names used in your X_train 
         data_dict = {
             'quarter': [quarter],
             'department': [department],
@@ -104,11 +101,13 @@ else:
             'over_time_scaled': [over_time_scaled]
         }
         
-        # Convert to DataFrame and align columns
         input_df = pd.DataFrame(data_dict)
+        
+        # ALIGN COLUMNS: This ensures your input matches the model's expected features perfectly
         input_df = input_df[model_columns]
 
-        # Use the Pipeline to predict
+        # The model loaded is the 'best_model' from your GridSearchCV, which is a Pipeline.
+        # Pipelines automatically apply the ColumnTransformer (StandardScaler, OneHotEncoder, etc.)
         prediction_idx = model.predict(input_df)[0]
         probs = model.predict_proba(input_df)[0]
         
@@ -118,7 +117,7 @@ else:
         # Display Results
         st.markdown(f"## Predicted Productivity Tier: **{result}**")
         
-        # This is where your error was occurring—ensure these are aligned correctly
+        # Determine confidence and color
         if result == 'High':
             st.success(f"Confidence: {probs[2]:.2%} — Optimal production levels expected.")
             st.balloons()
