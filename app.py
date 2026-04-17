@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import pickle
 
 # =========================
@@ -8,65 +7,40 @@ import pickle
 # =========================
 @st.cache_data
 def load_data():
-    df = pd.read_csv("final_classification_dataset.csv")
-    return df
+    return pd.read_csv("final_classification_dataset.csv")
 
 @st.cache_resource
 def load_model():
     with open("model.pkl", "rb") as f:
-        model = pickle.load(f)
-    return model
+        return pickle.load(f)
 
 df = load_data()
 model = load_model()
 
 # =========================
-# GET DYNAMIC RANGES
+# GET RANGES FROM DATASET
 # =========================
 def get_ranges(df):
-    ranges = {}
-    for col in df.columns:
-        if df[col].dtype != "object":
-            ranges[col] = (df[col].min(), df[col].max())
-    return ranges
+    numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+    return {col: (df[col].min(), df[col].max()) for col in numeric_cols}
 
 ranges = get_ranges(df)
 
 # =========================
-# HELPER FUNCTION
-# =========================
-def clamp(val, min_val, max_val):
-    return max(min_val, min(val, max_val))
-
-# =========================
 # TITLE
 # =========================
-st.title("Garment Productivity Prediction System")
+st.title("Garment Worker Productivity Prediction")
 
 st.markdown("""
-This system predicts worker productivity based on operational inputs.
-All input ranges are dynamically derived from the final dataset.
+This system predicts productivity based on real production factors.
+All input ranges are dynamically based on the dataset to ensure valid predictions.
 """)
 
 # =========================
-# PRESET EXAMPLE
+# DEFAULT VALUES (MEAN)
 # =========================
-st.subheader("Preset Example")
-
-preset = {
-    "wip": int(df["wip"].mean()),
-    "no_of_workers": int(df["no_of_workers"].mean()),
-    "smv": float(df["smv"].mean()),
-    "incentive": int(df["incentive"].mean()),
-    "idle_time": int(df["idle_time"].mean()),
-    "idle_men": int(df["idle_men"].mean()),
-    "over_time_scaled": float(df["over_time_scaled"].mean()) if "over_time_scaled" in df.columns else 0.0
-}
-
-# Clamp preset values
-for key in preset:
-    if key in ranges:
-        preset[key] = clamp(preset[key], ranges[key][0], ranges[key][1])
+def get_default(col):
+    return float(df[col].mean())
 
 # =========================
 # INPUT SECTION
@@ -78,68 +52,72 @@ col1, col2 = st.columns(2)
 with col1:
     wip = st.number_input(
         "Work In Progress (WIP)",
-        int(ranges["wip"][0]), int(ranges["wip"][1]),
-        preset["wip"]
+        min_value=int(ranges["wip"][0]),
+        max_value=int(ranges["wip"][1]),
+        value=int(get_default("wip"))
     )
     st.caption(f"Range: {ranges['wip'][0]} – {ranges['wip'][1]}")
 
-    workers = st.number_input(
-        "Number of Workers",
-        int(ranges["no_of_workers"][0]), int(ranges["no_of_workers"][1]),
-        preset["no_of_workers"]
-    )
-    st.caption(f"Range: {ranges['no_of_workers'][0]} – {ranges['no_of_workers'][1]}")
-
     smv = st.number_input(
         "SMV (Standard Minute Value)",
-        float(ranges["smv"][0]), float(ranges["smv"][1]),
-        preset["smv"]
+        min_value=float(ranges["smv"][0]),
+        max_value=float(ranges["smv"][1]),
+        value=get_default("smv")
     )
     st.caption(f"Range: {ranges['smv'][0]} – {ranges['smv'][1]}")
+
+    workers = st.number_input(
+        "Number of Workers",
+        min_value=int(ranges["no_of_workers"][0]),
+        max_value=int(ranges["no_of_workers"][1]),
+        value=int(get_default("no_of_workers"))
+    )
+    st.caption(f"Range: {ranges['no_of_workers'][0]} – {ranges['no_of_workers'][1]}")
 
 with col2:
     incentive = st.number_input(
         "Incentive",
-        int(ranges["incentive"][0]), int(ranges["incentive"][1]),
-        preset["incentive"]
+        min_value=int(ranges["incentive"][0]),
+        max_value=int(ranges["incentive"][1]),
+        value=int(get_default("incentive"))
     )
     st.caption(f"Range: {ranges['incentive'][0]} – {ranges['incentive'][1]}")
 
     idle_time = st.number_input(
         "Idle Time",
-        int(ranges["idle_time"][0]), int(ranges["idle_time"][1]),
-        preset["idle_time"]
+        min_value=int(ranges["idle_time"][0]),
+        max_value=int(ranges["idle_time"][1]),
+        value=int(get_default("idle_time"))
     )
     st.caption(f"Range: {ranges['idle_time'][0]} – {ranges['idle_time'][1]}")
 
     idle_men = st.number_input(
         "Idle Workers",
-        int(ranges["idle_men"][0]), int(ranges["idle_men"][1]),
-        preset["idle_men"]
+        min_value=int(ranges["idle_men"][0]),
+        max_value=int(ranges["idle_men"][1]),
+        value=int(get_default("idle_men"))
     )
     st.caption(f"Range: {ranges['idle_men'][0]} – {ranges['idle_men'][1]}")
 
 # =========================
-# OVERTIME (SPECIAL CASE)
+# OVERTIME (RAW VALUES)
 # =========================
-st.subheader("Additional Factor")
+st.subheader("Overtime")
 
-if "over_time_scaled" in ranges:
-    overtime = st.slider(
-        "Overtime (Scaled)",
-        float(ranges["over_time_scaled"][0]),
-        float(ranges["over_time_scaled"][1]),
-        preset["over_time_scaled"]
-    )
-else:
-    overtime = st.slider("Overtime (Scaled)", -2.0, 2.0, 0.0)
+overtime = st.number_input(
+    "Overtime (Minutes)",
+    min_value=int(ranges["over_time"][0]),
+    max_value=int(ranges["over_time"][1]),
+    value=int(get_default("over_time"))
+)
+st.caption(f"Range: {ranges['over_time'][0]} – {ranges['over_time'][1]}")
 
 # =========================
 # PREDICTION
 # =========================
 st.subheader("Prediction")
 
-if st.button("Predict Productivity"):
+if st.button("Predict"):
 
     input_data = pd.DataFrame({
         "wip": [wip],
@@ -148,13 +126,13 @@ if st.button("Predict Productivity"):
         "incentive": [incentive],
         "idle_time": [idle_time],
         "idle_men": [idle_men],
-        "over_time_scaled": [overtime]
+        "over_time": [overtime]
     })
 
     prediction = model.predict(input_data)[0]
 
     # =========================
-    # CLASSIFICATION LOGIC
+    # CLASSIFICATION
     # =========================
     if prediction < 0.5:
         category = "Low Productivity"
@@ -170,9 +148,9 @@ if st.button("Predict Productivity"):
     st.info(f"Category: {category}")
 
 # =========================
-# DATA PREVIEW
+# DATA OVERVIEW
 # =========================
-with st.expander("View Dataset Summary"):
+with st.expander("Dataset Summary"):
     st.write(df.describe())
 
 # =========================
@@ -180,6 +158,6 @@ with st.expander("View Dataset Summary"):
 # =========================
 st.markdown("""
 ---
-System designed with dataset-driven input validation to ensure consistency 
-between training data and prediction environment.
+This application ensures consistency between dataset, model training, 
+and user input ranges to improve prediction reliability.
 """)
