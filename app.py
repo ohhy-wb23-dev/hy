@@ -42,12 +42,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================================================
-# LOAD ASSETS & SCALING CONSTANTS
+# LOAD ASSETS
 # =========================================================
-# Statistics from final_classification_dataset.csv
-OVERTIME_MEAN = 4567.46
-OVERTIME_STD = 3348.82
-
 @st.cache_resource
 def load_model_assets():
     # Updated to your Gradient Boosting files
@@ -77,12 +73,10 @@ day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Saturday", "Sunday"]
 day_options = [d for d in day_order if d in df["day"].unique()]
 # --------------------------
 style_change_options = sorted(df["no_of_style_change"].dropna().unique().tolist())
-style_change_options = sorted(df["no_of_style_change"].dropna().unique().tolist())
 
 # Numeric ranges
 smv_min, smv_max = float(df["smv"].min()), float(df["smv"].max())
 wip_min, wip_max = int(df["wip"].min()), int(df["wip"].max())
-# Adjusted max to 15,000 as per your previous request
 over_time_min, over_time_max = 0, 15000 
 incentive_min, incentive_max = int(df["incentive"].min()), int(df["incentive"].max())
 idle_time_min, idle_time_max = int(df["idle_time"].min()), int(df["idle_time"].max())
@@ -174,19 +168,15 @@ if st.button("Generate Productivity Forecast", use_container_width=True):
     # Initialize 192 features with zeros
     input_df = pd.DataFrame(0, index=[0], columns=model_columns)
 
-    # Standardize Overtime internally
-    ot_scaled = (over_time - OVERTIME_MEAN) / OVERTIME_STD
-
-    # Numeric fields
+    # Numeric fields (Corrected: using exact model columns and raw values)
     numeric_fields = {
         "smv": smv,
         "wip": wip,
-        "over_time_scaled": ot_scaled,
+        "over_time": over_time,  # Fixed: No longer scaled, exact column match
         "incentive": incentive,
         "idle_time": idle_time,
         "idle_men": idle_men,
-        "no_of_workers": no_of_workers,
-        "team": 1 # Default team if not in UI
+        "no_of_workers": no_of_workers
     }
 
     for col, val in numeric_fields.items():
