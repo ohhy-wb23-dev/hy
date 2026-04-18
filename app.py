@@ -71,7 +71,12 @@ except Exception:
 # =========================================================
 quarter_options = sorted(df["quarter"].dropna().unique().tolist())
 department_options = sorted(df["department"].dropna().unique().tolist())
-day_options = sorted(df["day"].dropna().unique().tolist())
+# --- CUSTOM DAY SORTING ---
+day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Saturday", "Sunday"]
+# This extracts days that exist in your data but follows the order defined above
+day_options = [d for d in day_order if d in df["day"].unique()]
+# --------------------------
+style_change_options = sorted(df["no_of_style_change"].dropna().unique().tolist())
 style_change_options = sorted(df["no_of_style_change"].dropna().unique().tolist())
 
 # Numeric ranges
